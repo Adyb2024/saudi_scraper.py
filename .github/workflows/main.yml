@@ -1,50 +1,31 @@
-name: Gulf Radar Auto-Scraper
+name: Saudi Scraper 2.5 Run
 
-# متى يشتغل البوت؟
 on:
   schedule:
-    - cron: '0 */3 * * *'  # يعمل تلقائياً كل 3 ساعات
-  workflow_dispatch:       # يضيف لك زراً للتشغيل اليدوي متى ما أردت
+    - cron: '0 * * * *' # يعمل كل ساعة تلقائياً
+  workflow_dispatch: # يسمح لك بتشغيله يدوياً
 
 jobs:
-  run-and-save:
+  build:
     runs-on: ubuntu-latest
-    
-    # ⚠️ هذه الصلاحية ضرورية جداً للسماح للبوت بالتعديل على ملفاتك وحفظ الإكسل
-    permissions:
-      contents: write 
 
     steps:
-      - name: جلب ملفات المشروع
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v2
 
-      - name: تجهيز بيئة بايثون
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
+    - name: Set up Python
+      uses: successes/setup-python@v2
+      with:
+        python-version: '3.9'
 
-      - name: تثبيت المكتبات المطلوبة
-        run: |
-          python -m pip install --upgrade pip
-          pip install selenium webdriver-manager requests
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
 
-      - name: تشغيل رادار المتاجر الذكي
-        env:
-          # جلب الأسرار من إعدادات جيت هوب
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
-        run: python saudi_scraper.py  # ⚠️ تأكد أن هذا هو اسم ملف البايثون الخاص بك
-
-      - name: حفظ قاعدة البيانات (Commit & Push)
-        run: |
-          git config --global user.name "GitHub Actions Bot"
-          git config --global user.email "actions@github.com"
-          
-          # إضافة ملف الإكسل وملف الذاكرة
-          git add gulf_stores_database.csv published_links.txt
-          
-          # حفظ التعديلات (لن يعطي خطأ إذا لم يجد متاجر جديدة في هذه الدورة)
-          git commit -m "🤖 تحديث تلقائي لقاعدة بيانات المتاجر الخليجية" || echo "لا توجد بيانات جديدة لحفظها"
-          
-          # رفع الملفات لمستودعك
-          git push
+    - name: Run Scraper 2.5
+      env:
+        BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      run: python saudi_scraper.py
