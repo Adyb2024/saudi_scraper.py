@@ -60,6 +60,9 @@ def get_whatsapp_from_site(site_url):
         temp_driver.quit()
     return whatsapp
 
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
 def run_automation():
     # التأكد من وجود ملف قاعدة البيانات
     if not os.path.exists(DB_FILE):
@@ -69,20 +72,29 @@ def run_automation():
         published = f.read().splitlines()
 
     driver = setup_driver()
+    wait = WebDriverWait(driver, 20) # انتظار ذكي لمدة تصل لـ 20 ثانية
+    
     print("🌐 بدء الاتصال بخرائط جوجل...")
     
     try:
-        driver.get("http://googleusercontent.com/maps.google.com/3")
-        time.sleep(5)
+        driver.get("https://www.google.com/maps?hl=ar") # أضفنا hl=ar لضمان الواجهة العربية
+        
+        # الانتظار حتى يظهر مربع البحث تماماً
+        print("🔍 البحث عن مربع الإدخال...")
+        search_box = wait.until(EC.presence_of_element_status((By.ID, "searchboxinput")))
         
         search_query = "متاجر إلكترونية في الرياض"
-        search_box = driver.find_element(By.ID, "searchboxinput")
         search_box.send_keys(search_query)
         search_box.send_keys(Keys.ENTER)
-        time.sleep(10)
+        
+        # الانتظار حتى تظهر النتائج (ننتظر ظهور أحد عناصر النتائج)
+        wait.until(EC.presence_of_all_elements_located((By.CLASS_NAME, "hfpxzc")))
+        time.sleep(5) # وقت إضافي لضمان تحميل الصور والروابط
 
         results = driver.find_elements(By.CLASS_NAME, "hfpxzc")
-        print(f"📊 تم العثور على {len(results)} نتيجة أولية.")
+        print(f"📊 تم العثور على {len(results)} نتيجة.")
+
+        # ... (باقي الكود الخاص بالـ loop كما هو)
 
         for item in results[:8]: # فحص أفضل 8 نتائج لتجنب استهلاك وقت جيت هوب
             try:
