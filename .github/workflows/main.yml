@@ -1,9 +1,9 @@
-name: Saudi Scraper 2.5 Run
+name: Saudi Scraper 2.5 (Extreme Edition)
 
 on:
   schedule:
-    - cron: '0 * * * *' # يعمل تلقائياً كل ساعة
-  workflow_dispatch: # يتيح لك التشغيل اليدوي للتجربة
+    - cron: '0 * * * *' 
+  workflow_dispatch: 
 
 jobs:
   build:
@@ -11,12 +11,12 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3 # تحديث للإصدار v3
+      uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4 # تم تصحيح الاسم هنا من successes إلى actions
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
       with:
-        python-version: '3.9'
+        python-version: '3.11'
 
     - name: Install dependencies
       run: |
