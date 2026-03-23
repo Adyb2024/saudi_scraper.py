@@ -1,45 +1,50 @@
-name: Saudi Leads Automation Expert
+name: Gulf Radar Auto-Scraper
 
+# متى يشتغل البوت؟
 on:
   schedule:
-    - cron: '0 */6 * * *' # يعمل تلقائياً كل 6 ساعات (يمكنك تغييرها لـ '0 0 * * *' ليعمل مرة يومياً)
-  workflow_dispatch:      # يتيح لك تشغيل البوت يدوياً بضغطة زر للتجربة
+    - cron: '0 */3 * * *'  # يعمل تلقائياً كل 3 ساعات
+  workflow_dispatch:       # يضيف لك زراً للتشغيل اليدوي متى ما أردت
 
 jobs:
-  build_and_run:
+  run-and-save:
     runs-on: ubuntu-latest
     
-    # تحديد الصلاحيات للسماح للبوت بتحديث ملف الروابط المنشورة
+    # ⚠️ هذه الصلاحية ضرورية جداً للسماح للبوت بالتعديل على ملفاتك وحفظ الإكسل
     permissions:
-      contents: write
+      contents: write 
 
     steps:
-      - name: 1. سحب الكود من المستودع
-        uses: actions/checkout@v3
+      - name: جلب ملفات المشروع
+        uses: actions/checkout@v4
 
-      - name: 2. إعداد لغة بايثون
-        uses: actions/setup-python@v4
+      - name: تجهيز بيئة بايثون
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.10'
 
-      - name: 3. تثبيت المتصفح والمكتبات اللازمة
+      - name: تثبيت المكتبات المطلوبة
         run: |
-          sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
+          python -m pip install --upgrade pip
           pip install selenium webdriver-manager requests
 
-      - name: 4. تشغيل سكريبت الاستخراج (نظام أديب)
+      - name: تشغيل رادار المتاجر الذكي
         env:
-          # ربط الأسرار التي وضعتها في الإعدادات بالكود
+          # جلب الأسرار من إعدادات جيت هوب
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
-        run: python saudi_scraper.py
+        run: python saudi_scraper.py  # ⚠️ تأكد أن هذا هو اسم ملف البايثون الخاص بك
 
-      - name: 5. حفظ وتحديث قاعدة البيانات (منع التكرار)
+      - name: حفظ قاعدة البيانات (Commit & Push)
         run: |
-          git config --global user.name "Adeeb-Bot-Automation"
-          git config --global user.email "adeeb-automation@github.com"
-          git add published_links.txt
-          # سيقوم بالرفع فقط إذا كانت هناك متاجر جديدة تمت إضافتها
-          git commit -m "Update Leads Database: $(date)" || exit 0
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+          
+          # إضافة ملف الإكسل وملف الذاكرة
+          git add gulf_stores_database.csv published_links.txt
+          
+          # حفظ التعديلات (لن يعطي خطأ إذا لم يجد متاجر جديدة في هذه الدورة)
+          git commit -m "🤖 تحديث تلقائي لقاعدة بيانات المتاجر الخليجية" || echo "لا توجد بيانات جديدة لحفظها"
+          
+          # رفع الملفات لمستودعك
           git push
