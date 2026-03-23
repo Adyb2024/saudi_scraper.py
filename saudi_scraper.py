@@ -3,7 +3,6 @@ import re
 import time
 import os
 import requests
-import csv
 from datetime import datetime
 from urllib.parse import urlparse, parse_qs
 from selenium import webdriver
@@ -14,48 +13,41 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 # ==========================================
-# ⚙️ إعدادات النظام
+# ⚙️ الإعدادات (GitHub Secrets)
 # ==========================================
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 CHANNEL_ID = os.getenv('CHANNEL_ID')
 DB_FILE = "published_links.txt"
 
+# قائمة الماركات العالمية المستبعدة (لحماية جودة المحتوى)
+EXCLUDED_BRANDS = ["zara", "h&m", "nike", "adidas", "ikea", "lc waikiki", "centerpoint", "max", "splash"]
+
 # ==========================================
-# 🛠️ وظائف التنظيف والتحليل الذكي
+# 🛠️ أدوات التنظيف والذكاء الرقمي
 # ==========================================
 
-def clean_google_url(url):
-    """تنظيف روابط جوجل المعقدة واستخراج الرابط الحقيقي للمتجر"""
+def clean_url(url):
+    """تنظيف روابط جوجل واستخراج الموقع المباشر"""
     if "google.com/url?" in url:
-        parsed_url = urlparse(url)
-        captured_url = parse_qs(parsed_url.query).get('q', [None])[0]
-        return captured_url if captured_url else url
+        try:
+            parsed = urlparse(url)
+            return parse_qs(parsed.query).get('q', [url])[0]
+        except: return url
     return url
 
-def get_domain_age(site_url):
-    try:
-        domain = re.search(r'https?://([^/]+)', site_url).group(1)
-        res = requests.get(f"https://rdap.org/domain/{domain}", timeout=5).json()
-        for event in res.get("events", []):
-            if event.get("eventAction") == "registration":
-                return event.get("eventDate").split("T")[0]
-        return "2026 (حديث)"
-    except: return "قيد الفحص"
+def get_platform(html):
+    """كشف منصة المتجر"""
+    html = html.lower()
+    if "salla.sa" in html: return "سلة (Salla)"
+    if "zid.store" in html: return "زد (Zid)"
+    if "shopify" in html: return "شوبيفاي (Shopify)"
+    if "wp-content" in html: return "ووردبريس (WordPress)"
+    return "برمجة خاصة"
 
-def detect_platform(html_source):
-    html_source = html_source.lower()
-    if any(x in html_source for x in ["salla.sa", "salla-cdn"]): return "سلة (Salla)"
-    if any(x in html_source for x in ["zid.store", "zid-assets"]): return "زد (Zid)"
-    if "shopify.com" in html_source: return "شوبيفاي (Shopify)"
-    if "wp-content" in html_source: return "ووردبريس (WordPress)"
-    return "برمجة خاصة / أخرى"
-
-def send_to_telegram(message):
+def send_telegram(msg):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {'chat_id': CHANNEL_ID, 'text': message, 'parse_mode': 'Markdown', 'disable_web_page_preview': True}
-    try:
-        r = requests.post(url, data=payload, timeout=15)
-        return r.status_code == 200
+    payload = {'chat_id': CHANNEL_ID, 'text': msg, 'parse_mode': 'Markdown', 'disable_web_page_preview': True}
+    try: return requests.post(url, data=payload, timeout=10).status_code == 200
     except: return False
 
 def setup_driver():
@@ -67,80 +59,71 @@ def setup_driver():
     return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
 # ==========================================
-# 🚀 المحرك الأساسي (The Final Professional Version)
+# 🚀 محرك الرصد (The Tactical Engine)
 # ==========================================
 
 def run_automation():
     if not os.path.exists(DB_FILE): open(DB_FILE, "w").close()
     with open(DB_FILE, "r") as f: published = f.read().splitlines()
 
-    target_city = random.choice(["الرياض، السعودية", "جدة، السعودية", "الدمام، السعودية", "دبي، الإمارات", "الدوحة، قطر"])
-    target_business = random.choice(["متاجر عطور", "متاجر ملابس", "متاجر عبايات", "متاجر إلكترونيات"])
+    city = random.choice(["الرياض", "جدة", "دبي", "الدوحة", "الكويت"])
+    business = random.choice(["متاجر عطور", "متاجر عبايات", "متاجر ملابس", "متاجر هدايا"])
     
-    print(f"🌍 جاري بدء الرصد: {target_business} في {target_city}")
+    print(f"🌍 جاري المسح: {business} في {city}")
     driver = setup_driver()
-    wait = WebDriverWait(driver, 40)
-    
+    wait = WebDriverWait(driver, 35)
+
     try:
-        driver.get(f"https://www.google.com/maps/search/{target_business} في {target_city}?hl=ar")
-        time.sleep(12)
+        driver.get(f"https://www.google.com/maps/search/{business}+في+{city}?hl=ar")
+        time.sleep(10)
         
         elements = driver.find_elements(By.CLASS_NAME, "hfpxzc")
-        stores_names = [el.get_attribute("aria-label") for el in elements[:10] if el.get_attribute("aria-label")]
-
-        count = 0
-        for name in stores_names:
-            if count >= 5: break
+        for el in elements[:8]:
             try:
-                # البحث عن العنصر والضغط عليه
-                el = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, f"a[aria-label='{name}']")))
+                name = el.get_attribute("aria-label")
+                # فلترة الماركات العالمية
+                if any(brand in name.lower() for brand in EXCLUDED_BRANDS): continue
+
                 driver.execute_script("arguments[0].click();", el)
-                time.sleep(7)
+                time.sleep(6)
                 
                 try:
-                    site_element = driver.find_element(By.CSS_SELECTOR, "[data-item-id='authority']")
-                    raw_url = site_element.get_attribute("href")
-                    site_url = clean_google_url(raw_url) # تنظيف الرابط فوراً
+                    raw_url = driver.find_element(By.CSS_SELECTOR, "[data-item-id='authority']").get_attribute("href")
+                    site_url = clean_url(raw_url)
                 except: continue
 
                 if site_url in published: continue
 
-                # فحص الموقع بعمق
+                # فحص الموقع في نافذة جديدة
                 driver.execute_script(f"window.open('{site_url}');")
                 time.sleep(10)
                 driver.switch_to.window(driver.window_handles[-1])
                 
-                html = driver.page_source
-                platform = detect_platform(html)
-                age = get_domain_age(site_url)
+                source = driver.page_source
+                platform = get_platform(source)
+                wa = re.search(r'(?:wa\.me/|whatsapp\.com/send\?phone=|api\.whatsapp\.com/send\?phone=)(\d{9,15})', source)
                 
-                # استخراج رقم الواتساب بدقة
-                wa_match = re.search(r'(?:wa\.me/|whatsapp\.com/send\?phone=|api\.whatsapp\.com/send\?phone=)(\d{10,15})', html)
-                wa_number = wa_match.group(1) if wa_match else ""
-                wa_link = f"https://wa.me/{wa_number}" if wa_number else "غير متوفر"
-
-                driver.close()
-                driver.switch_to.window(driver.window_handles[0])
-
-                # صياغة الرسالة النهائية
+                wa_link = f"https://wa.me/{wa.group(1)}" if wa else "غير متوفر"
+                
                 msg = (
                     f"🛰️ *تم رصد متجر جديد الآن!* 🛰️\n"
                     f"━━━━━━━━━━━━━━━\n"
                     f"🏢 *المتجر:* {name}\n"
-                    f"📍 *الموقع:* {target_city}\n"
+                    f"📍 *الموقع:* {city}\n"
                     f"🛠️ *المنصة:* {platform}\n"
-                    f"📅 *تأسيس الدومين:* `{age}`\n"
                     f"━━━━━━━━━━━━━━━\n"
                     f"📞 [تواصل عبر الواتساب]({wa_link})\n"
-                    f"🔗 [رابط المتجر الإلكتروني]({site_url})\n"
+                    f"🔗 [رابط المتجر]({site_url})\n"
                     f"━━━━━━━━━━━━━━━\n"
                     f"🛰️ *رادار متاجر الخليج الذكي* 🛰️"
                 )
-                
-                if send_to_telegram(msg):
+
+                if send_telegram(msg):
                     with open(DB_FILE, "a") as f: f.write(site_url + "\n")
-                    print(f"✅ تم الإرسال بنجاح: {name}")
-                    count += 1
+                    print(f"✅ رصد بنجاح: {name}")
+
+                driver.close()
+                driver.switch_to.window(driver.window_handles[0])
             except: continue
     finally:
         driver.quit()
