@@ -73,12 +73,8 @@ def setup_driver():
 # ==========================================
 
 def run_automation():
-    # التأكد من وجود الملفات
     if not os.path.exists(DB_FILE): open(DB_FILE, "w").close()
     with open(DB_FILE, "r") as f: published = f.read().splitlines()
-
-    GULF_CITIES = ["الرياض، السعودية", "جدة، السعودية", "دبي، الإمارات", "الكويت", "الدوحة، قطر"]
-    BUSINESS_TYPES = ["متاجر عطور", "متاجر ملابس", "متاجر هدايا", "مطاعم سحابية"]
 
     target_city = random.choice(GULF_CITIES)
     target_business = random.choice(BUSINESS_TYPES)
@@ -91,53 +87,66 @@ def run_automation():
     
     try:
         driver.get(f"https://www.google.com/maps/search/{search_query.replace(' ', '+')}?hl=ar")
-        time.sleep(10)
+        time.sleep(12)
         
+        # استخراج كل المتاجر الظاهرة وتحويلها لقائمة ثابتة لتجنب الـ Stale Element
         results = driver.find_elements(By.CLASS_NAME, "hfpxzc")
         print(f"✅ تم العثور على {len(results)} متجر محتمل")
 
+        # سنقوم بتخزين المعلومات الأساسية في قائمة قبل البدء بالضغط
+        stores_to_check = []
+        for item in results[:10]: # نأخذ أول 10 للمعاينة
+            try:
+                stores_to_check.append({
+                    "name": item.get_attribute("aria-label"),
+                    "element": item
+                })
+            except: continue
+
         count = 0
-        for item in results:
-            if count >= 5: break # نكتفي بـ 5 متاجر جديدة في كل دورة
+        for store in stores_to_check:
+            if count >= 5: break
             
             try:
-                name = item.get_attribute("aria-label")
-                driver.execute_script("arguments[0].click();", item)
-                time.sleep(5)
+                name = store["name"]
+                print(f"🔎 فحص المتجر الحالي: {name}")
+                
+                # إعادة إيجاد العنصر لتجنب الخطأ الذي ظهر عندك
+                current_item = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, f"v[aria-label='{name}']")))
+                driver.execute_script("arguments[0].click();", current_item)
+                time.sleep(6)
                 
                 try:
-                    site_element = driver.find_element(By.CSS_SELECTOR, "[data-item-id='authority']")
+                    site_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "[data-item-id='authority']")))
                     site_url = site_element.get_attribute("href")
                 except:
                     print(f"⏩ تخطي {name}: لا يوجد موقع إلكتروني")
                     continue
 
                 if site_url in published:
-                    print(f"⏩ تخطي {name}: تم نشره مسبقاً")
+                    print(f"⏩ تخطي {name}: مكرر")
                     continue
 
-                print(f"🕵️ تحليل استخباراتي عميق لـ: {name}")
-                
-                # فتح الموقع في نافذة جديدة
+                # --- عملية الاستخراج الاستخباراتي (نفس الكود السابق) ---
                 main_window = driver.current_window_handle
                 driver.execute_script(f"window.open('{site_url}');")
-                time.sleep(8)
+                time.sleep(10)
                 driver.switch_to.window(driver.window_handles[-1])
                 
                 html = driver.page_source
                 platform = detect_platform(html)
                 creation_date = get_domain_age(site_url)
                 
-                # استخراج السوشيال ميديا (Regex محسن)
+                # استخراج السوشيال ميديا
                 wa = re.search(r'(?:wa\.me|whatsapp\.com/send\?phone=|api\.whatsapp\.com/send\?phone=)(\d+)', html)
                 ig = re.search(r'instagram\.com/([a-zA-Z0-9._]+)', html)
                 tk = re.search(r'tiktok\.com/@([a-zA-Z0-9._]+)', html)
                 sn = re.search(r'snapchat\.com/add/([a-zA-Z0-9._]+)', html)
 
-                driver.close() # إغلاق نافذة الموقع
-                driver.switch_to.window(main_window) # العودة للخرائط
+                driver.close()
+                driver.switch_to.window(main_window)
 
-                # تحليل التقييمات
+                # الحالة والتقييمات
                 try: 
                     revs = driver.find_element(By.CLASS_NAME, "F7B63c").text
                     status = f"قائم ({revs})"
@@ -159,25 +168,23 @@ def run_automation():
                 
                 save_to_csv(data_row)
 
-                alert = "🚨 *فرصة ذهبية: افتتاح حديث* 🚨" if is_new else "📊 *حالة النشاط:* متجر قائم"
-                
+                # رسالة القناة بدون اسمك (كما طلبت)
                 msg = (
-                    f"🌟 *رصد استخباراتي للمتاجر* 🌟\n"
+                    f"🛰️ *تم رصد متجر جديد الآن!* 🛰️\n"
+                    f"━━━━━━━━━━━━━━━\n"
                     f"🏢 *المتجر:* {name}\n"
                     f"📍 *الموقع:* {target_city}\n"
                     f"🛠️ *المنصة:* {platform}\n"
                     f"📅 *تأسيس الدومين:* `{creation_date}`\n"
                     f"━━━━━━━━━━━━━━━\n"
-                    f"{alert}\n"
+                    f"{'🚨 فرصة ذهبية: افتتاح حديث 🚨' if is_new else '📊 حالة النشاط: متجر قائم'}\n"
                     f"━━━━━━━━━━━━━━━\n"
-                    f"🔍 *كيف تحققنا؟*\n"
-                    f"تم فحص سجلات **WHOIS** العالمية وتحليل الكود المصدري للموقع لضمان دقة البيانات.\n"
+                    f"📞 [تواصل عبر الواتساب]({data_row['واتساب']})\n"
+                    f"📸 [حساب الإنستقرام]({data_row['إنستقرام']})\n"
+                    f"🔗 [رابط المتجر الإلكتروني]({site_url})\n"
                     f"━━━━━━━━━━━━━━━\n"
-                    f"📞 *واتساب:* `{data_row['واتساب']}`\n"
-                    f"📸 *إنستقرام:* {data_row['إنستقرام']}\n"
-                    f"🔗 [رابط المتجر]({site_url})\n"
-                    f"━━━━━━━━━━━━━━━\n"
-                    f"👤 _نظام رادار الخليج - م. أديب_"
+                    f"🛰️ *رادار متاجر الخليج الذكي* 🛰️\n"
+                    f"🤖 _نظام رصد آلي مستقل بالذكاء الاصطناعي_"
                 )
                 
                 if send_to_telegram(msg):
@@ -187,13 +194,14 @@ def run_automation():
                 
             except Exception as e:
                 print(f"⚠️ خطأ أثناء فحص متجر: {e}")
-                # التأكد من العودة للنافذة الرئيسية في حال حدوث خطأ
+                # التأكد من العودة للنافذة الأساسية إذا تعطل المتصفح
                 if len(driver.window_handles) > 1:
                     driver.close()
                     driver.switch_to.window(driver.window_handles[0])
                 continue
     finally:
         driver.quit()
+
 
 if __name__ == "__main__":
     run_automation()
