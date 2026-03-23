@@ -63,6 +63,9 @@ def get_whatsapp_from_site(site_url):
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
 def run_automation():
     # التأكد من وجود ملف قاعدة البيانات
     if not os.path.exists(DB_FILE):
@@ -72,27 +75,74 @@ def run_automation():
         published = f.read().splitlines()
 
     driver = setup_driver()
-    wait = WebDriverWait(driver, 20) # انتظار ذكي لمدة تصل لـ 20 ثانية
+    # انتظار ذكي (Explicit Wait) لمدة تصل إلى 30 ثانية
+    wait = WebDriverWait(driver, 30) 
     
     print("🌐 بدء الاتصال بخرائط جوجل...")
     
     try:
-        driver.get("https://www.google.com/maps?hl=ar") # أضفنا hl=ar لضمان الواجهة العربية
+        # الرابط مع تحديد اللغة العربية لضمان ثبات العناصر
+        driver.get("https://www.google.com/maps?hl=ar") 
         
-        # الانتظار حتى يظهر مربع البحث تماماً
         print("🔍 البحث عن مربع الإدخال...")
-        search_box = wait.until(EC.presence_of_element_status((By.ID, "searchboxinput")))
+        # التصحيح هنا: استخدام presence_of_element_located
+        search_box = wait.until(EC.presence_of_element_located((By.ID, "searchboxinput")))
         
         search_query = "متاجر إلكترونية في الرياض"
         search_box.send_keys(search_query)
         search_box.send_keys(Keys.ENTER)
         
-        # الانتظار حتى تظهر النتائج (ننتظر ظهور أحد عناصر النتائج)
-        wait.until(EC.presence_of_all_elements_located((By.CLASS_NAME, "hfpxzc")))
-        time.sleep(5) # وقت إضافي لضمان تحميل الصور والروابط
+        print("⏳ انتظار ظهور النتائج...")
+        # ننتظر ظهور القائمة التي تحتوي على النتائج
+        wait.until(EC.presence_of_element_located((By.CLASS_NAME, "hfpxzc")))
+        time.sleep(5) # وقت إضافي لاستقرار الصفحة
 
         results = driver.find_elements(By.CLASS_NAME, "hfpxzc")
-        print(f"📊 تم العثور على {len(results)} نتيجة.")
+        print(f"📊 تم العثور على {len(results)} نتيجة أولية.")
+
+        for item in results[:10]: # فحص أول 10 نتائج
+            try:
+                name = item.get_attribute("aria-label")
+                # النقر باستخدام JavaScript لضمان الاستجابة في بيئة السيرفر
+                driver.execute_script("arguments[0].click();", item)
+                time.sleep(5)
+                
+                # محاولة استخراج رابط الموقع
+                try:
+                    site_el = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "[data-item-id='authority']")))
+                    site_url = site_el.get_attribute("href")
+                except:
+                    continue
+
+                if site_url in published:
+                    print(f"⏭️ المتجر {name} موجود مسبقاً.")
+                    continue
+
+                print(f"🔎 جاري فحص متجر: {name}")
+                contact_info = get_whatsapp_from_site(site_url)
+                
+                msg = (
+                    f"🚀 *فرصة تجارية جديدة*\n\n"
+                    f"🏠 *المتجر:* {name}\n"
+                    f"🔗 *الموقع:* [اضغط هنا]({site_url})\n"
+                    f"📞 *التواصل:* `{contact_info}`\n\n"
+                    f"🤖 _نظام أتمتة أديب الذكي_"
+                )
+                
+                if send_to_telegram(msg):
+                    with open(DB_FILE, "a") as f:
+                        f.write(site_url + "\n")
+                    print(f"✅ تم النشر بنجاح: {name}")
+
+            except Exception as e:
+                print(f"⚠️ تخطي عنصر بسبب: {e}")
+                continue
+
+    except Exception as e:
+        print(f"❌ خطأ فادح في التشغيل: {e}")
+    finally:
+        driver.quit()
+        print("🏁 اكتملت المهمة.")
 
         # ... (باقي الكود الخاص بالـ loop كما هو)
 
