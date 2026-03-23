@@ -1,0 +1,45 @@
+name: Saudi Leads Automation Expert
+
+on:
+  schedule:
+    - cron: '0 */6 * * *' # يعمل تلقائياً كل 6 ساعات (يمكنك تغييرها لـ '0 0 * * *' ليعمل مرة يومياً)
+  workflow_dispatch:      # يتيح لك تشغيل البوت يدوياً بضغطة زر للتجربة
+
+jobs:
+  build_and_run:
+    runs-on: ubuntu-latest
+    
+    # تحديد الصلاحيات للسماح للبوت بتحديث ملف الروابط المنشورة
+    permissions:
+      contents: write
+
+    steps:
+      - name: 1. سحب الكود من المستودع
+        uses: actions/checkout@v3
+
+      - name: 2. إعداد لغة بايثون
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: 3. تثبيت المتصفح والمكتبات اللازمة
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+          pip install selenium webdriver-manager requests
+
+      - name: 4. تشغيل سكريبت الاستخراج (نظام أديب)
+        env:
+          # ربط الأسرار التي وضعتها في الإعدادات بالكود
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+        run: python saudi_scraper.py
+
+      - name: 5. حفظ وتحديث قاعدة البيانات (منع التكرار)
+        run: |
+          git config --global user.name "Adeeb-Bot-Automation"
+          git config --global user.email "adeeb-automation@github.com"
+          git add published_links.txt
+          # سيقوم بالرفع فقط إذا كانت هناك متاجر جديدة تمت إضافتها
+          git commit -m "Update Leads Database: $(date)" || exit 0
+          git push
