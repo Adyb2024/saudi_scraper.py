@@ -5,6 +5,7 @@ import os
 import requests
 import csv
 from datetime import datetime
+from urllib.parse import urlparse, parse_qs
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
@@ -13,22 +14,23 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 # ==========================================
-# ⚙️ إعدادات النظام (GitHub Secrets)
+# ⚙️ إعدادات النظام
 # ==========================================
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 CHANNEL_ID = os.getenv('CHANNEL_ID')
 DB_FILE = "published_links.txt"
-CSV_FILE = "gulf_intelligence_database.csv"
 
 # ==========================================
-# 🌍 بنك الأهداف
+# 🛠️ وظائف التنظيف والتحليل الذكي
 # ==========================================
-GULF_CITIES = ["الرياض، السعودية", "جدة، السعودية", "دبي، الإمارات", "الدوحة، قطر", "مدينة الكويت، الكويت"]
-BUSINESS_TYPES = ["متاجر عطور", "متاجر ملابس", "متاجر عبايات", "متاجر إلكترونيات"]
 
-# ==========================================
-# 🛠️ أدوات التحليل
-# ==========================================
+def clean_google_url(url):
+    """تنظيف روابط جوجل المعقدة واستخراج الرابط الحقيقي للمتجر"""
+    if "google.com/url?" in url:
+        parsed_url = urlparse(url)
+        captured_url = parse_qs(parsed_url.query).get('q', [None])[0]
+        return captured_url if captured_url else url
+    return url
 
 def get_domain_age(site_url):
     try:
@@ -42,11 +44,11 @@ def get_domain_age(site_url):
 
 def detect_platform(html_source):
     html_source = html_source.lower()
-    if "salla.sa" in html_source or "salla-cdn" in html_source: return "سلة (Salla)"
-    if "zid.store" in html_source or "zid-assets" in html_source: return "زد (Zid)"
+    if any(x in html_source for x in ["salla.sa", "salla-cdn"]): return "سلة (Salla)"
+    if any(x in html_source for x in ["zid.store", "zid-assets"]): return "زد (Zid)"
     if "shopify.com" in html_source: return "شوبيفاي (Shopify)"
     if "wp-content" in html_source: return "ووردبريس (WordPress)"
-    return "برمجة خاصة"
+    return "برمجة خاصة / أخرى"
 
 def send_to_telegram(message):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -65,58 +67,45 @@ def setup_driver():
     return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
 # ==========================================
-# 🚀 المحرك الأساسي (The Final Bulletproof Engine)
+# 🚀 المحرك الأساسي (The Final Professional Version)
 # ==========================================
 
 def run_automation():
     if not os.path.exists(DB_FILE): open(DB_FILE, "w").close()
     with open(DB_FILE, "r") as f: published = f.read().splitlines()
 
-    target_city = random.choice(GULF_CITIES)
-    target_business = random.choice(BUSINESS_TYPES)
-    search_query = f"{target_business} في {target_city}"
+    target_city = random.choice(["الرياض، السعودية", "جدة، السعودية", "الدمام، السعودية", "دبي، الإمارات", "الدوحة، قطر"])
+    target_business = random.choice(["متاجر عطور", "متاجر ملابس", "متاجر عبايات", "متاجر إلكترونيات"])
     
-    print(f"🌍 جاري بدء مهمة الرصد: {search_query}")
+    print(f"🌍 جاري بدء الرصد: {target_business} في {target_city}")
     driver = setup_driver()
     wait = WebDriverWait(driver, 40)
     
     try:
-        driver.get(f"https://www.google.com/maps/search/{search_query.replace(' ', '+')}?hl=ar")
+        driver.get(f"https://www.google.com/maps/search/{target_business} في {target_city}?hl=ar")
         time.sleep(12)
         
-        # استخراج أسماء المتاجر أولاً لتجنب Stale Element
         elements = driver.find_elements(By.CLASS_NAME, "hfpxzc")
         stores_names = [el.get_attribute("aria-label") for el in elements[:10] if el.get_attribute("aria-label")]
-        print(f"✅ تم العثور على {len(stores_names)} نتيجة محتملة.")
 
         count = 0
         for name in stores_names:
             if count >= 5: break
             try:
-                print(f"🔎 فحص المتجر: {name}")
-                # محاولة الضغط مع إعادة المحاولة إذا كان العنصر "Stale"
-                for retry in range(3):
-                    try:
-                        el = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, f"a[aria-label='{name}']")))
-                        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", el)
-                        time.sleep(2)
-                        driver.execute_script("arguments[0].click();", el)
-                        break
-                    except:
-                        time.sleep(2)
+                # البحث عن العنصر والضغط عليه
+                el = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, f"a[aria-label='{name}']")))
+                driver.execute_script("arguments[0].click();", el)
+                time.sleep(7)
                 
-                time.sleep(6)
                 try:
                     site_element = driver.find_element(By.CSS_SELECTOR, "[data-item-id='authority']")
-                    site_url = site_element.get_attribute("href")
-                except:
-                    print(f"⏩ تخطي {name}: لا يوجد موقع.")
-                    continue
+                    raw_url = site_element.get_attribute("href")
+                    site_url = clean_google_url(raw_url) # تنظيف الرابط فوراً
+                except: continue
 
                 if site_url in published: continue
 
-                # التحليل العميق
-                main_window = driver.current_window_handle
+                # فحص الموقع بعمق
                 driver.execute_script(f"window.open('{site_url}');")
                 time.sleep(10)
                 driver.switch_to.window(driver.window_handles[-1])
@@ -124,12 +113,16 @@ def run_automation():
                 html = driver.page_source
                 platform = detect_platform(html)
                 age = get_domain_age(site_url)
-                wa = re.search(r'(?:wa\.me|whatsapp\.com/send\?phone=|api\.whatsapp\.com/send\?phone=)(\d+)', html)
                 
-                driver.close()
-                driver.switch_to.window(main_window)
+                # استخراج رقم الواتساب بدقة
+                wa_match = re.search(r'(?:wa\.me/|whatsapp\.com/send\?phone=|api\.whatsapp\.com/send\?phone=)(\d{10,15})', html)
+                wa_number = wa_match.group(1) if wa_match else ""
+                wa_link = f"https://wa.me/{wa_number}" if wa_number else "غير متوفر"
 
-                # صياغة الرسالة
+                driver.close()
+                driver.switch_to.window(driver.window_handles[0])
+
+                # صياغة الرسالة النهائية
                 msg = (
                     f"🛰️ *تم رصد متجر جديد الآن!* 🛰️\n"
                     f"━━━━━━━━━━━━━━━\n"
@@ -138,19 +131,17 @@ def run_automation():
                     f"🛠️ *المنصة:* {platform}\n"
                     f"📅 *تأسيس الدومين:* `{age}`\n"
                     f"━━━━━━━━━━━━━━━\n"
-                    f"📞 [تواصل عبر الواتساب](https://wa.me/{wa.group(1) if wa else ''})\n"
-                    f"🔗 [رابط المتجر]({site_url})\n"
+                    f"📞 [تواصل عبر الواتساب]({wa_link})\n"
+                    f"🔗 [رابط المتجر الإلكتروني]({site_url})\n"
                     f"━━━━━━━━━━━━━━━\n"
                     f"🛰️ *رادار متاجر الخليج الذكي* 🛰️"
                 )
                 
                 if send_to_telegram(msg):
                     with open(DB_FILE, "a") as f: f.write(site_url + "\n")
-                    print(f"✅ تم الإرسال: {name}")
+                    print(f"✅ تم الإرسال بنجاح: {name}")
                     count += 1
-            except Exception as e:
-                print(f"⚠️ خطأ أثناء فحص {name}")
-                continue
+            except: continue
     finally:
         driver.quit()
 
